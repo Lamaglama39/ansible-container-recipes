@@ -1,0 +1,55 @@
+- name: Docker Install
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Install Apt Packages
+      package:
+        update_cache: true
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+
+    - name: Check if Docker GPG key exists
+      stat:
+        path: /etc/apt/keyrings/docker.gpg
+      register: docker_gpg_key
+      changed_when: false
+
+    - name: Add Docker GPG key
+      shell: curl -sSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --batch --yes --output /etc/apt/keyrings/docker.gpg
+      when: not docker_gpg_key.stat.exists
+
+    - name: Get Ubuntu codename
+      command: lsb_release -cs
+      register: ubuntu_codename
+      changed_when: false
+
+    - name: Add the Docker apt repository
+      lineinfile:
+        path: /etc/apt/sources.list.d/docker.list
+        line: deb [signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ubuntu_codename.stdout }} stable
+        create: true
+
+    - name: Install Docker
+      package:
+        update_cache: true
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+      register: Install_Docker
+
+    - name: Add User to Docker Group
+      user:
+        name: "{{ ansible_env.SUDO_USER }}"
+        groups: docker
+        append: true
+
+    - name: Reboot now
+      reboot:
+      when: Install_Docker.changed
