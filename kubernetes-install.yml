@@ -1,0 +1,185 @@
+- name: Install Kubernetes
+  hosts: all
+  gather_facts: true
+  become: true
+  tasks:
+    - name: Install Apt Packages
+      package:
+        update_cache: true
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+
+    - name: Check if Docker GPG key exists
+      stat:
+        path: /etc/apt/keyrings/docker.gpg
+      register: docker_gpg_key
+      changed_when: false
+
+    - name: Add Docker GPG key
+      shell: curl -sSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor --batch --yes --output /etc/apt/keyrings/docker.gpg
+      when: not docker_gpg_key.stat.exists
+
+    - name: Get Ubuntu codename
+      command: lsb_release -cs
+      register: ubuntu_codename
+      changed_when: false
+
+    - name: Add the Docker apt repository
+      lineinfile:
+        path: /etc/apt/sources.list.d/docker.list
+        line: deb [signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu {{ ubuntu_codename.stdout }} stable
+        create: true
+
+    - name: Check if Kubernetes GPG key exists
+      stat:
+        path: /etc/apt/keyrings/kubernetes.gpg
+      register: kubernetes_gpg_key
+      changed_when: false
+
+    - name: Add Kubernetes GPG key
+      shell: curl -fsSL https://dl.k8s.io/apt/doc/apt-key.gpg | gpg --dearmor --batch --yes --output /etc/apt/keyrings/kubernetes.gpg
+      when: not kubernetes_gpg_key.stat.exists
+
+    - name: Add Kubernetes apt repository
+      lineinfile:
+        path: /etc/apt/sources.list.d/kubernetes.list
+        line: deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://apt.kubernetes.io/ kubernetes-xenial main
+        create: true
+
+    - name: Check if Helm GPG key exists
+      stat:
+        path: /etc/apt/keyrings/helm.gpg
+      register: helm_gpg_key
+      changed_when: false
+
+    - name:  Add Helm GPG key
+      shell: curl https://baltocdn.com/helm/signing.asc | gpg --dearmor --batch --yes --output /etc/apt/keyrings/helm.gpg
+      when: not helm_gpg_key.stat.exists
+
+    - name: Add Helm apt repository
+      lineinfile:
+        path: /etc/apt/sources.list.d/helm.list
+        line: deb [signed-by=/etc/apt/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main
+        create: yes
+
+
+    - name: Install containerd Kubernetes Packages
+      package:
+        update_cache: true
+        name:
+          - docker.io
+          - containerd
+          - kubelet
+          - kubeadm
+          - kubectl
+          - helm
+      register: Install_Kubernetes
+
+    - name: Hold Kubernetes Packages
+      dpkg_selections:
+        name: "{{item}}"
+        selection: hold
+      with_items:
+        - kubelet
+        - kubeadm
+        - kubectl
+
+    - name: Setting kernel module
+      lineinfile:
+        path: /etc/modules-load.d/kubernetes.conf
+        line: "{{item}}"
+        create: true
+      with_items:
+        - overlay
+        - br_netfilter
+
+    - name: Load kernel module
+      modprobe:
+        name: br_netfilter
+        state: present
+
+    - name: Setting Sysctl
+      lineinfile:
+        path: /etc/sysctl.conf
+        regexp: "^{{item.regexp}}.*"
+        line: "{{item.line}}"
+      with_items:
+        - regexp: net.ipv4.ip_forward
+          line: net.ipv4.ip_forward=1
+        - regexp: net.bridge.bridge-nf-call-ip6table
+          line: net.bridge.bridge-nf-call-ip6table=1
+        - regexp: net.bridge.bridge-nf-call-iptables
+          line: net.bridge.bridge-nf-call-iptables=1
+        - regexp: fs.inotify.max_user_instances
+          line: fs.inotify.max_user_instances=100000
+        - regexp: fs.inotify.max_user_watches
+          line: fs.inotify.max_user_watches=100000
+
+    - name: Disable swap
+      lineinfile:
+        path: /etc/fstab
+        regexp: '\sswap\s'
+        state: absent
+
+    - name: Create containerd config directory
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: "0755"
+
+    - name: Check if containerd config file cri
+      command: grep -q 'disabled_plugins = \[\]' /etc/containerd/config.toml
+      register: cri_config_check
+      failed_when: false
+      changed_when: false
+      ignore_errors: true
+
+    - name: Create containerd default config file
+      shell: containerd config default > /etc/containerd/config.toml
+      when: cri_config_check.rc != 0
+
+    - name: Enable cri
+      replace:
+        path: /etc/containerd/config.toml
+        regexp: 'disabled_plugins\s*=\s*\["cri"\]'
+        replace: 'disabled_plugins = []'
+      when: cri_config_check.rc != 0
+
+    - name: Check if containerd config file cgroup
+      command: grep -q 'SystemdCgroup = true' /etc/containerd/config.toml
+      register: cgroup_config_check
+      failed_when: false
+      changed_when: false
+      ignore_errors: true
+
+    - name: Enable systemd cgroup
+      lineinfile:
+        path: /etc/containerd/config.toml
+        regexp: '^(\s*)SystemdCgroup\s*=\s*false'
+        line: '\1SystemdCgroup = true'
+        backrefs: yes
+      when: cgroup_config_check.rc != 0
+
+    - name: Check if crictl is already configured
+      command: grep -q 'unix:///run/containerd/containerd.sock' /etc/crictl.yaml
+      register: crictl_config_check
+      failed_when: false
+      changed_when: false
+      ignore_errors: true
+
+    - name: Setting crictl endpoint
+      shell: crictl config --set runtime-endpoint=unix:///run/containerd/containerd.sock --set image-endpoint=unix:///run/containerd/containerd.sock
+      when: crictl_config_check.rc != 0
+
+    - name: Add User to Docker Group
+      user:
+        name: "{{ ansible_env.SUDO_USER }}"
+        groups: docker
+        append: true
+
+    - name: Reboot now
+      reboot:
+      when: Install_Kubernetes.changed
