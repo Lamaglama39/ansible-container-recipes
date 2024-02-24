@@ -1,0 +1,86 @@
+- name: Setting Kubernetes Network
+  hosts: master_leader
+  gather_facts: true
+
+  vars:
+    pod_network_cidr: "10.0.0.0/16"
+
+  tasks:
+    - name: Primary IP Address
+      set_fact:
+        leader_primary_ip: "{{ ansible_facts['default_ipv4']['address'] }}"
+
+    - name: Check if Calico manifest already exists
+      stat:
+        path: "./calico.yaml"
+      register: calico_manifest
+
+    - name: Download Calico manifest
+      get_url:
+        url: https://raw.githubusercontent.com/projectcalico/calico/v3.25.1/manifests/calico.yaml
+        dest: "./calico.yaml"
+        force: false
+      when: not calico_manifest.stat.exists
+
+
+    - name: Check for IP_AUTODETECTION_METHOD marker in calico.yaml
+      shell: "grep -q '# BEGIN ANSIBLE MANAGED BLOCK IP_AUTODETECTION_METHOD' ./calico.yaml"
+      register: ip_autodetection_check
+      failed_when: false
+      changed_when: false
+      ignore_errors: true
+
+    - name: Add IP_AUTODETECTION_METHOD to calico.yaml
+      blockinfile:
+        path: "./calico.yaml"
+        insertafter: 'value: "autodetect"'
+        block: |2
+                      - name: IP_AUTODETECTION_METHOD
+                        value: "cidr={{ leader_primary_ip }}/21"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK IP_AUTODETECTION_METHOD"
+      when: ip_autodetection_check.rc != 0
+
+    - name: Check for CALICO_IPV4POOL_CIDR marker in calico.yaml
+      shell: "grep -q '# BEGIN ANSIBLE MANAGED BLOCK CALICO_IPV4POOL_CIDR' ./calico.yaml"
+      register: calico_ipv4pool_cidr_check
+      failed_when: false
+      changed_when: false
+      ignore_errors: true
+
+    - name: Add CALICO_IPV4POOL_CIDR to calico.yaml
+      blockinfile:
+        path: "./calico.yaml"
+        insertafter: '#   value: "192.168.0.0/16"'
+        block: |2
+                      - name: CALICO_IPV4POOL_CIDR
+                        value: "{{ pod_network_cidr }}"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK CALICO_IPV4POOL_CIDR"
+      when: calico_ipv4pool_cidr_check.rc != 0
+
+    - name: Check if Calico is already applied
+      shell:
+        cmd: kubectl get cm -n kube-system | grep -q calico-config
+      register: calico_check
+      failed_when: false
+      changed_when: false
+      ignore_errors: true
+
+    - name: Apply the Calico manifest
+      shell:
+        cmd: kubectl apply -f calico.yaml
+      when: calico_check.rc != 0
+
+    - name: Wait for network to become ready
+      pause:
+        seconds: 60
+
+    - name: Get all pods and services in all namespaces
+      shell:
+        cmd: kubectl get pod,svc --all-namespaces -o wide
+      register: kubectl_output
+      changed_when: false
+
+    - name: Display kubectl output
+      debug:
+        var: kubectl_output.stdout_lines
+      changed_when: false
