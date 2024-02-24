@@ -1,0 +1,54 @@
+- name: Setting Kubernetes Cluster
+  hosts: master_leader
+  gather_facts: true
+  become: true
+
+  vars:
+    pod_network_cidr: "10.0.0.0/16"
+
+  tasks:
+    - name: Primary IP Address
+      set_fact:
+        leader_primary_ip: "{{ ansible_facts['default_ipv4']['address'] }}"
+
+    - name: Initialize the Kubernetes cluster
+      shell: |
+        kubeadm init --control-plane-endpoint={{ leader_primary_ip }}:6443 --pod-network-cidr={{ pod_network_cidr }} --upload-certs
+      args:
+        creates: /etc/kubernetes/admin.conf
+
+    - name: Create .kube directory
+      file:
+        path: "/home/{{ ansible_env.SUDO_USER }}/.kube"
+        state: directory
+        mode: 0755
+
+    - name: Copy admin.conf to user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: "/home/{{ ansible_env.SUDO_USER }}/.kube/config"
+        remote_src: yes
+        owner: "{{ ansible_env.SUDO_USER }}"
+        group: "{{ ansible_env.SUDO_USER }}"
+        mode: 0644
+
+
+    - name: Change ownership of the kube config
+      file:
+        path: "/home/{{ ansible_env.SUDO_USER }}/.kube/config"
+        owner: "{{ ansible_env.SUDO_USER }}"
+        group: "{{ ansible_env.SUDO_USER }}"
+
+    - name: Wait for cluster to become ready
+      pause:
+        seconds: 60
+
+    - name: Get all pods and services in all namespaces
+      shell: kubectl get pod,svc --all-namespaces -o wide
+      register: kubectl_output
+      become: false
+      changed_when: false
+
+    - name: Display kubectl output
+      debug:
+        var: kubectl_output.stdout_lines
