@@ -24,7 +24,7 @@
       changed_when: false
       delegate_to: "{{ groups['kubernetes_master_leader'][0] }}"
 
-    - name: Join swarm cluster as a manager
+    - name: Join Kubernetes cluster as a manager
       shell: "{{ hostvars[groups['kubernetes_master_leader'][0]]['join_token'].stdout }} --control-plane --certificate-key {{ hostvars[groups['kubernetes_master_leader'][0]]['join_certs'].stdout }}"
       become: true
       when: node_check.stdout == ""
@@ -40,7 +40,7 @@
       changed_when: false
       delegate_to: "{{ groups['kubernetes_master_leader'][0] }}"
 
-    - name: Join swarm cluster as a worker
+    - name: Join Kubernetes cluster as a worker
       shell: "{{ hostvars[groups['kubernetes_master_leader'][0]]['join_token'].stdout }}"
       become: true
       when: node_check.stdout == ""
