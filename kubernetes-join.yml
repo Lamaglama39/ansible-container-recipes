@@ -1,0 +1,64 @@
+- name: Initialize Kubernetes on leader
+  hosts: master_leader
+  gather_facts: true
+  tasks:
+    - name: Get kubernetes join-certs
+      shell: kubeadm init phase upload-certs --upload-certs | tail -n 1
+      become: true
+      register: join_certs
+      changed_when: false
+
+    - name: Get kubernetes join-token
+      shell: kubeadm token create --print-join-command
+      register: join_token
+      changed_when: false
+
+- name: Join manager
+  hosts: master_other
+  gather_facts: true
+  tasks:
+    - name: Check node status in the Kubernetes cluster
+      shell: kubectl get nodes | grep {{ ansible_hostname }} || true
+      register: node_check
+      ignore_errors: true
+      changed_when: false
+      delegate_to: "{{ groups['kubernetes_master_leader'][0] }}"
+
+    - name: Join swarm cluster as a manager
+      shell: "{{ hostvars[groups['kubernetes_master_leader'][0]]['join_token'].stdout }} --control-plane --certificate-key {{ hostvars[groups['kubernetes_master_leader'][0]]['join_certs'].stdout }}"
+      become: true
+      when: node_check.stdout == ""
+
+- name: Join worker
+  hosts: worker
+  gather_facts: true
+  tasks:
+    - name: Check node status in the Kubernetes cluster
+      shell: kubectl get nodes | grep {{ ansible_hostname }} || true
+      register: node_check
+      ignore_errors: true
+      changed_when: false
+      delegate_to: "{{ groups['kubernetes_master_leader'][0] }}"
+
+    - name: Join swarm cluster as a worker
+      shell: "{{ hostvars[groups['kubernetes_master_leader'][0]]['join_token'].stdout }}"
+      become: true
+      when: node_check.stdout == ""
+
+- name: Output Nodes
+  hosts: master_leader
+  gather_facts: true
+  become: false
+  tasks:
+    - name: Wait for nodes to become ready
+      pause:
+        seconds: 60
+
+    - name: Get all nodes
+      shell: kubectl get nodes
+      register: kubectl_nodes_output
+      changed_when: false
+
+    - name: Display kubectl output
+      debug:
+        var: kubectl_nodes_output.stdout_lines
