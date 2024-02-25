@@ -70,8 +70,9 @@
       package:
         update_cache: true
         name:
-          - docker.io
-          - containerd
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
           - kubelet
           - kubeadm
           - kubectl
