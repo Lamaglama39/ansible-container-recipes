@@ -39,7 +39,7 @@ do
                     --instance-id "$instance_id" \
                     --query 'Reservations[].Instances[].Tags[?Key==`Name`].Value' \
                     --output text)
-  hostname=${tag_name##*-}
+  hostname=${tag_name#*-}
   hostname_count=$(echo -n "$hostname" | wc -c)
   count=$((count += 1))
 done
