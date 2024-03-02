@@ -45,3 +45,4 @@ terraform.rc
 # Custom
 **/.terraform.lock.hcl*
 **/.ssh/*
+**/ansible_inventory.yml*

@@ -21,6 +21,11 @@ variable "subnet_cidr" {
 }
 
 # EC2
+variable "os_user" {
+  description = "EC2 OS User"
+  type        = string
+}
+
 variable "nodes" {
   description = "ノード名一覧"
   type        = list(string)
