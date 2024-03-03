@@ -1,14 +1,14 @@
-- name: Initialize Kubernetes on leader
+- name: Get kubernetes join-token
   hosts: master_leader
   gather_facts: true
   tasks:
-    - name: Get kubernetes join-certs
+    - name: manager join-certs
       shell: kubeadm init phase upload-certs --upload-certs | tail -n 1
       become: true
       register: join_certs
       changed_when: false
 
-    - name: Get kubernetes join-token
+    - name: worker join-token
       shell: kubeadm token create --print-join-command
       register: join_token
       changed_when: false
@@ -22,10 +22,10 @@
       register: node_check
       ignore_errors: true
       changed_when: false
-      delegate_to: "{{ groups['kubernetes_master_leader'][0] }}"
+      delegate_to: "{{ groups['master_leader'][0] }}"
 
     - name: Join Kubernetes cluster as a manager
-      shell: "{{ hostvars[groups['kubernetes_master_leader'][0]]['join_token'].stdout }} --control-plane --certificate-key {{ hostvars[groups['kubernetes_master_leader'][0]]['join_certs'].stdout }}"
+      shell: "{{ hostvars[groups['master_leader'][0]]['join_token'].stdout }} --control-plane --certificate-key {{ hostvars[groups['master_leader'][0]]['join_certs'].stdout }}"
       become: true
       when: node_check.stdout == ""
 
@@ -38,12 +38,27 @@
       register: node_check
       ignore_errors: true
       changed_when: false
-      delegate_to: "{{ groups['kubernetes_master_leader'][0] }}"
+      delegate_to: "{{ groups['master_leader'][0] }}"
 
     - name: Join Kubernetes cluster as a worker
-      shell: "{{ hostvars[groups['kubernetes_master_leader'][0]]['join_token'].stdout }}"
+      shell: "{{ hostvars[groups['master_leader'][0]]['join_token'].stdout }}"
       become: true
       when: node_check.stdout == ""
+
+
+- name: Drain master nodes
+  hosts: master_leader
+  gather_facts: yes
+  tasks:
+    - name: Drain manager leader node
+      shell: kubectl drain {{ ansible_facts['hostname'] }} --ignore-daemonsets
+      changed_when: false
+
+    - name: Drain manager node
+      shell: kubectl drain {{ item }} --ignore-daemonsets
+      delegate_to: "{{ groups['master_leader'][0] }}"
+      loop: "{{ groups['master_other'] }}"
+      changed_when: false
 
 - name: Output Nodes
   hosts: master_leader
@@ -57,8 +72,19 @@
     - name: Get all nodes
       shell: kubectl get nodes
       register: kubectl_nodes_output
+      become: false
       changed_when: false
 
-    - name: Display kubectl output
+    - name: Display kubectl nodes
       debug:
         var: kubectl_nodes_output.stdout_lines
+
+    - name: Get all pods and services in all namespaces
+      shell: kubectl get pod,svc --all-namespaces -o wide
+      register: kubectl_output
+      become: false
+      changed_when: false
+
+    - name: Display kubectl namespaces
+      debug:
+        var: kubectl_output.stdout_lines

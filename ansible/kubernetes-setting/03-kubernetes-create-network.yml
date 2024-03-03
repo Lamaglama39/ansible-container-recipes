@@ -3,12 +3,17 @@
   gather_facts: true
 
   vars:
-    pod_network_cidr: "10.0.0.0/16"
+    pod_network_cidr: "10.1.0.0/16"
 
   tasks:
-    - name: Primary IP Address
+    - name: Collect primary IP address
       set_fact:
         leader_primary_ip: "{{ ansible_facts['default_ipv4']['address'] }}"
+
+    - name: Retrieve primary IP address with CIDR notation
+      shell: ip a | grep "inet.*{{ leader_primary_ip }}" | awk '{print $2}'
+      register: leader_primary_ip_cidr_result
+      changed_when: false
 
     - name: Check if Calico manifest already exists
       stat:
@@ -36,7 +41,7 @@
         insertafter: 'value: "autodetect"'
         block: |2
                       - name: IP_AUTODETECTION_METHOD
-                        value: "cidr={{ leader_primary_ip }}/21"
+                        value: "cidr={{ leader_primary_ip_cidr_result.stdout }}"
         marker: "# {mark} ANSIBLE MANAGED BLOCK IP_AUTODETECTION_METHOD"
       when: ip_autodetection_check.rc != 0
 
@@ -75,12 +80,10 @@
         seconds: 60
 
     - name: Get all pods and services in all namespaces
-      shell:
-        cmd: kubectl get pod,svc --all-namespaces -o wide
+      shell: kubectl get pod,svc --all-namespaces -o wide
       register: kubectl_output
       changed_when: false
 
-    - name: Display kubectl output
+    - name: Display kubectl namespaces
       debug:
         var: kubectl_output.stdout_lines
-      changed_when: false

@@ -2,6 +2,10 @@
   hosts: all
   gather_facts: true
   become: true
+
+  vars:
+    kubernetes_version: "v1.29"
+
   tasks:
     - name: Install Apt Packages
       package:
@@ -10,7 +14,13 @@
           - apt-transport-https
           - ca-certificates
           - curl
-          - gnupg
+          - gnupg2
+
+    - name: Create /etc/apt/keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
 
     - name: Check if Docker GPG key exists
       stat:
@@ -40,13 +50,13 @@
       changed_when: false
 
     - name: Add Kubernetes GPG key
-      shell: curl -fsSL https://dl.k8s.io/apt/doc/apt-key.gpg | gpg --dearmor --batch --yes --output /etc/apt/keyrings/kubernetes.gpg
+      shell: curl -fsSL https://pkgs.k8s.io/core:/stable:/{{ kubernetes_version }}/deb/Release.key | gpg --dearmor --batch --yes --output /etc/apt/keyrings/kubernetes.gpg
       when: not kubernetes_gpg_key.stat.exists
 
     - name: Add Kubernetes apt repository
       lineinfile:
         path: /etc/apt/sources.list.d/kubernetes.list
-        line: deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://apt.kubernetes.io/ kubernetes-xenial main
+        line: deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://pkgs.k8s.io/core:/stable:/{{ kubernetes_version }}/deb/ /
         create: true
 
     - name: Check if Helm GPG key exists
@@ -64,7 +74,6 @@
         path: /etc/apt/sources.list.d/helm.list
         line: deb [signed-by=/etc/apt/keyrings/helm.gpg] https://baltocdn.com/helm/stable/debian/ all main
         create: yes
-
 
     - name: Install containerd Kubernetes Packages
       package:

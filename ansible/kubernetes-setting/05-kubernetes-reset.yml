@@ -1,0 +1,52 @@
+- name: Reset Kubernetes Cluster
+  hosts: all
+  gather_facts: true
+  become: true
+
+  tasks:
+    - name: Check node status in the Kubernetes cluster
+      shell: kubectl get nodes
+      register: kubectl_nodes
+      ignore_errors: true
+      failed_when: false
+      changed_when: false
+      delegate_to: "{{ groups['master_leader'][0] }}"
+      become: false
+
+    - name: Check if cluster output contains 'clusters:'
+      set_fact:
+        cluster_nodes: "{{ kubectl_nodes.stderr }}"
+
+    - name: Reset kubeadm if cluster is configured
+      shell: kubeadm reset --force
+      when: kubectl_nodes.stderr == ""
+      ignore_errors: yes
+
+    - name: Stop kubelet if cluster is configured
+      service:
+        name: kubelet
+        state: stopped
+      when: kubectl_nodes.stderr == ""
+
+    - name: Remove Kubernetes configuration directories if cluster is configured
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - ~/calico.yaml
+        - /etc/kubernetes/
+        - ~/.kube/
+        - /var/lib/kubelet/
+        - /var/lib/cni/
+        - /etc/cni/
+        - /var/lib/etcd/
+      when: kubectl_nodes.stderr == ""
+
+    - name: Clear iptables if cluster is configured
+      shell: iptables -F && iptables -X
+      ignore_errors: yes
+      when: kubectl_nodes.stderr == ""
+
+    - name: Reboot now
+      reboot:
+      when: kubectl_nodes.stderr == ""
