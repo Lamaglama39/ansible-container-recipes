@@ -1,0 +1,38 @@
+- name: Reset Docker Swarm as worker
+  hosts: worker
+  gather_facts: false
+  tasks:
+    - name: Check if node is part of a Swarm cluster
+      shell: docker info --format '{{ "{{.Swarm.LocalNodeState}}" }}'
+      register: swarm_status
+      changed_when: false
+
+    - name: Join swarm cluster as a worker
+      shell: "docker swarm leave"
+      when: swarm_status.stdout == 'active'
+
+- name: Reset Docker Swarm as manager
+  hosts: master_other
+  gather_facts: true
+  tasks:
+    - name: Check if node is part of a Swarm cluster
+      shell: docker info --format '{{ "{{.Swarm.LocalNodeState}}" }}'
+      register: swarm_status
+      changed_when: false
+
+    - name: Join swarm cluster as a manager
+      shell: "docker swarm leave --force"
+      when: swarm_status.stdout == 'active'
+
+- name: Reset Docker Swarm as manager leader
+  hosts: master_leader
+  gather_facts: true
+  tasks:
+    - name: Check if node is part of a Swarm cluster
+      shell: docker info --format '{{ "{{.Swarm.LocalNodeState}}" }}'
+      register: swarm_status
+      changed_when: false
+
+    - name: Join swarm cluster as a manager
+      shell: "docker swarm leave --force"
+      when: swarm_status.stdout == 'active'
