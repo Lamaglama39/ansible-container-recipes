@@ -5,7 +5,7 @@ data "aws_ami" "ubuntu18" {
   most_recent = true
   owners      = ["amazon"]
   filter {
-    name = "name"
+    name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-*"]
   }
 }
@@ -14,7 +14,7 @@ data "aws_ami" "ubuntu20" {
   most_recent = true
   owners      = ["amazon"]
   filter {
-    name = "name"
+    name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-*"]
   }
 }
@@ -23,7 +23,7 @@ data "aws_ami" "ubuntu22" {
   most_recent = true
   owners      = ["amazon"]
   filter {
-    name = "name"
+    name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
   }
 }
@@ -32,7 +32,7 @@ data "aws_ami" "ubuntu23" {
   most_recent = true
   owners      = ["amazon"]
   filter {
-    name = "name"
+    name   = "name"
     values = ["ubuntu/images/hvm-ssd/ubuntu-lunar-23.04-amd64-server-*"]
   }
 }
@@ -52,7 +52,7 @@ resource "aws_instance" "node" {
 
   tags = merge(
     {
-      "Name" = "${var.base_name}-${each.value}"
+      "Name" = "${each.value}"
     },
     var.tags
   )
