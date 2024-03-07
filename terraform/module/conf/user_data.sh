@@ -39,9 +39,8 @@ do
                     --instance-id "$instance_id" \
                     --query 'Reservations[].Instances[].Tags[?Key==`Name`].Value' \
                     --output text)
-  hostname=${tag_name#*-}
-  hostname_count=$(echo -n "$hostname" | wc -c)
+  hostname_count=$(echo -n "$tag_name" | wc -c)
   count=$((count += 1))
 done
 
-sudo hostnamectl set-hostname "$hostname"
+sudo hostnamectl set-hostname "$tag_name"

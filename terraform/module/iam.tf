@@ -36,7 +36,7 @@ resource "aws_iam_role_policy_attachment" "systems_manager" {
 
 # EC2参照用 IAMポリシー
 resource "aws_iam_policy" "ec2_describe" {
-  name        = "${var.base_name}-ec2-describe"
+  name = "${var.base_name}-ec2-describe"
 
   policy = <<EOF
 {
