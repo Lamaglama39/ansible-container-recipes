@@ -90,7 +90,7 @@ all:
 ## ■ プレイブック
 各プレイブックの概要と設定値について解説します。
 
-### Docker Swarm
+### ・ Docker Swarm
 
 ---
 * [01-docker-install.yml](./docker-setting/01-docker-install.yml)
@@ -124,7 +124,7 @@ all:
     再度Swarmクラスターを作成する場合は、[02-docker-swarm-create.yml](./docker-setting/02-docker-swarm-create.yml ) から再実行してください。
 
 
-### Kubernetes
+### ・ Kubernetes
 
 ---
 * [01-kubernetes-install.yml](./kubernetes-setting/01-kubernetes-install.yml)
